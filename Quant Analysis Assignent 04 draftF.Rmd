@@ -1,0 +1,610 @@
+---
+Title: 'SIMM61: Effects of declining ruralities on males'' mental health'
+Author: Elise Perrault
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+# 1- Introduction
+
+
+#2- Background
+A (short) research overview, where you present some articles or other literature that relates to your topic of research.
+
+# 3- Theory
+A presentation of your theoretical framework/concepts.
+- ruralities 
+- decline
+- masculinities 
+- mental health 
+- migration / mobility / immobility 
+
+
+
+# 4- Data and method
+Present your database and your focal variables (x and y). Comment on your choice of variables, for example the operationalization of your research question. Illustrate the distribution of your focal variables with graphs and appropriate measures of central tendency and dispersion. If you have recoded any of the variables, report this and explain why you have chosen to recode them in this way. Also present your choice of method (multiple regression analysis) and your analytic strategy.
+
+
+
+```{r}
+# A - Setting the work directory and packages
+
+setwd("G:/My Drive/Cours/Assignment/R files")
+library(haven)
+library(tidyverse)
+library(plyr)
+library(dplyr)
+library(skimr)
+library(magrittr)
+```
+
+Dataset 
+
+The Quality Of Goverment EU Regional Dataset 2020, University of Gothenburg
+
+It presents 337 variables on demographics, digtal society and economy, education, environment, health, labor market, poverty and social exclusion, quality of government, science and technology, tourism and transport, covering three levels of European regions. 
+The variables we are interested in have been extracted from Eurostat dataset and cover the Nomenclature of Territorial Unites for Statistics (NUTS) level 2 which comprises 373 units over 37 countries.  
+Non-EU countries like Albania, Switzerland, Liechtenstein, or Turkey, are included.
+
+```{r}
+# B - Loading the dataset from SPSS
+qog_dataset <- read_csv("qog_eureg_long_nov20.csv")
+```
+The dataset is reduced by selected 19 relevant variables related to labour market, education, and health. 
+> Are scales and directions ok?
+
+```{r}
+# We select the variables and assign them a right name 
+
+qog_selected <- qog_dataset %>%
+  dplyr::rename(eagri.m = "eu_emtk_ab_m",  # employment in agri, percentage of total employment .m = male, . f = female, t = total
+         eagri.f = "eu_emtk_ab_f",
+         eagri.t = "eu_emtk_ab_t",
+         shdeath.t = "eu_hea_sh_t",# number of deaths by self harm per 100 000 inhab
+         shdeath.m = "eu_hea_sh_m",
+         shdeath.f = "eu_hea_sh_f",
+         empserv.f = "eu_emtk_gu_f", #Employment in services, as percentage of total employment, female
+        empadmin.f = "eu_emtk_n_f",  #Employment in administrative and support service activities, as percentage of total employment, female 
+        empsoc_f = "eu_emtk_q_f", # Employment in human health and social work activities, as percentage of total employment, female ()
+         edatt.sec.m = "eu_edatt_ed34_y2564m", # educational attainment for ages 25-64, secondary education, male 
+         edatt.ter.f = "eu_edatt_ed58_y2564f", # educational attainment for ages 25-64, tertiary education
+         unemprate.ym = "eu_unemp_1524m", # Unemployment rate for 15-24 years old, male
+        unemprate.tm = "eu_unemp_2064m", #Unemployment rate for 20-64 years old, male
+         neet = "eu_neet_y1524m", # 15-24 years old population neither in employment nor in education percentage
+        gdp = "eu_gdp_pps_hab", # Regional gross domestic product (PPS per inhabitant) by NUTS 2 regions (eu gdp pps hab)
+         netmigr = "eu_cnmigratrt", #crude rate of net migration plus statistical adjustment, expressed per 1000 inhabitants
+        density = "eu_per_km2", #Population density, average population per square km 
+          pop.t = "eu_d2jan_t", #population at 1st January
+         pop.m = "eu_d2jan_m",
+         pop.f = "eu_d2jan_f") %>%
+  
+  
+  select(year,
+    nuts2, 
+         region_code,
+         region_name,
+         cname,
+         eagri.m,
+    eagri.t,
+    shdeath.t,
+    shdeath.m,
+    shdeath.f,
+    empserv.f,
+    empadmin.f,
+    empsoc_f,
+    edatt.sec.m,
+    edatt.ter.f,
+    unemprate.ym,
+    unemprate.tm,
+    neet,
+    gdp,
+    netmigr,
+    density,
+    pop.t,
+    pop.m,
+    pop.f)  
+
+```
+
+Since the project is only concerned with the territorial category nuts 2, we filter out nuts 1 and nuts 2 rows by removing NA values in the nuts 2 column. 
+
+```{r}
+
+qog_selected$nuts2 [qog_selected$nuts2 == ""] <- NA
+qog_nuts2 <- filter(qog_selected, !is.na(nuts2))
+```
+
+```{r}
+# We calculate the suicide rate because we realised the numbers we have are absolute numbers
+qog_nuts2a <- qog_nuts2 %>% 
+  mutate(suiciderate.m = (shdeath.m / pop.m) * 100000, 
+suiciderate.f = (shdeath.f / pop.f) * 100000,
+suiciderate.t = (shdeath.t / pop.t) * 100000)
+
+```
+
+```{r}
+# In order to mitigate the possible effects of regional heterogeneity when interpreting results, is created another categorical variable which introduces European subregions. Countries are grouped based on the CIA World factbook seven European subregions: Northern Europe, Western Europe, Southern Europe, Eastern Europe, Southeast Europe, Southwest Europe.
+
+qog_nuts2b <- mutate(qog_nuts2a, eusubregions = ifelse(cname %in% c("France", "Belgium", "Netherlands", "Germany", "Austria", "Switzerland", "Luxembourg", "Liechtenstein"), "Western Europe",
+                        ifelse(cname %in% c("Ireland", "United Kingdom", "Iceland", "Norway", "Denmark", "Sweden", "Finland", "Estonia", "Lithuania", "Latvia"),  "Northern Europe",
+                        ifelse(cname %in% c("Portugal", "Spain", "Spain", "Italy", "Malta", "Albania", "Bosnia and Herzegovina", "Bulgaria", "Croatia", "Greece", "Kosovo", "Montenegro",                                             "North Macedonia", "Romania", "Serbia", "Slovenia", "Turkey", "Cyprus"), "Southern Europe",
+                       ifelse(cname %in% c("Poland", "Czech Republic", "Slovakia", "Hungary", "Ukraine", "Moldavia", "Belarus"), "Eastern Europe", NA))))) 
+```
+
+```{r}
+# We create a new variable based on the rural-urban typology for NUTS 2 developed by the Netherlands Interdisciplinary Demographic Institute. This new categorical variable will serve as our dependent variable.  
+
+qog_eu <- qog_nuts2b %>% 
+  
+  mutate(qog_2015b, rururban = ifelse(region_code %in% c("AT11", "AT21", "AT22", "AT31", "AT32", "BE34", "BE35", "BG31", "BG32", "BG33", "BG42", "CZ03", "CZ05", "CZ07", "DE14", "DE22", "DE23", "DE24", "DE26", "DE27", "DE73", "DE80", "DEB2", "DEE0", "DEG0", "DK02", "DK03", "DK04", "DK05", "EE00", "ES42", "ES43", "FI1D", "FI19", "FI20", "FRF2", "FRE2", "FRC2", "FRB0", "FRD1", "FRC1", "FRH0", "FRI3", "FRI2", "FRK1", "FRJ1", "FRM0", "EL51", "EL53", "EL54", "EL61", "EL62", "EL63", "EL64", "EL65", "EL41", "EL42", "HU21", "HU22", "HU23", "HU31", "HU32", "HU33", "IE04", "IE05", "IS00", "ITH1", "ITI3", "ITF1", "ITF2", "ITF5", "ITF6", "ITG2", "NO02", "NO03", "NO04", "NO05", "NO07", "PL81", "PL82", "PL72", "PL84", "PL41", "PL52", "PL62", "PT15", "PT16", "PT18", "RO11", "RO12", "RO21", "RO22", "RO31", "RO41", "RO42", "SE21", "SE31", "SE32", "SE33", "SI04", "SK02", "SK03", "SK04", "UKM6"), "PR", 
+                                                        ifelse(region_code %in% c("AT13", "AT34", "BE10", "BE21", "BE22", "BE23", "BE24", "BE25", "BE32", "BG41", "CH03", "CH04", "CZ01", "CZ02", "DE11", "DE12", "DE21", "DE25", "DE30", "DE50", "DE60", "DE71", "DE92", "DEA1", "DEA2", "DEA5", "DEC0", "DED2", "DED5", "DK01", "ES21", "ES24", "ES30", "ES51", "ES52", "ES61", "ES63", "ES64", "ES70", "FI1B", "FR10", "FRE1", "FRI1", "FRK2", "FRL0", "EL30", "HU11", "ITC1", "ITC3", "ITC4", "ITI4", "ITF3", "ITG1", "LT01", "LV00", "MT00", "NL21", "NL22", "NL23", "NL31", "NL32", "NL33", "NL41", "NL42", "NO01", "PL91", "PL21", "PL22", "PL51", "PT17", "PT30", "RO32", "SE1", "SK01", "UKC1", "UKC2", "UKD6", "UKD3", "UKD4", "UKD7", "UKE3", "UKE4", "UKF1", "UKF2", "UKG2", "UKG3", "UKH2", "UKH3", "UKI3", "UKI4", "UKI5", "UKI6", "UKI7", "UKJ1", "UKJ2", "UKJ3", "UKJ4", "UKK1", "UKK2", "UKL2", "UKM2", "UKM3"), "PU", 
+                                                          ifelse(region_code %in% c("AT12", "AT33", "BE31", "BE33", "BG34", "CH01", "CH02", "CH05", "CH02", "CH05", "CH06", "CH07", "CY00", "CZ04", "CZ06", "CZ08", "DE13", "DE40", "DE72", "DE91", "DE93", "DE94", "DEA3", "DEA4", "DEB1", "DEB3", "DED4", "DEF0", "ES11", "ES12", "ES13", "ES22", "ES23", "ES41", "ES53", "ES62", "FI1C", "FRD2", "FRF3", "FRF1", "FRG0", "FRJ2", "EL52", "EL43", "HU12", "IE06", "ITC2", "ITH2", "ITH3", "ITH4", "ITH5", "ITI1", "ITI2", "ITF4", "LI00", "LT02", "LU00", "NL11", "NL12", "NL13", "NL34", "NO06", "PL71", "PL42", "PL43", "PL61", "PL63", "PL92", "PT11", "PT20", "SE12", "SE22", "SE23", "SI02", "UKD1", "UKE1", "UKE2", "UKF3", "UKG1", "UKH1", "UKK3", "UKK4", "UKL1", "UKM5", "UKN0"), "IN", NA)))) %>% 
+  
+  select(year,
+    nuts2, 
+         region_code,
+         region_name,
+         cname,
+         eusubregions,
+         rururban,
+         eagri.m,
+    eagri.t,
+    suiciderate.t,
+    suiciderate.m,
+    suiciderate.f,
+    shdeath.t,
+    shdeath.m,
+    shdeath.f,
+    empserv.f,
+    empadmin.f,
+    empsoc_f,
+    edatt.sec.m,
+    edatt.ter.f,
+    unemprate.ym,
+    unemprate.tm,
+    neet,
+    gdp,
+    netmigr,
+    density,
+    pop.t,
+    pop.m,
+    pop.f)
+```
+
+
+```{r}
+# We should remove all the NAs and this should give us all EU units 
+qog_eu <- filter(qog_eu, !is.na(rururban))
+```
+
+
+```{r}
+# We need to assign rururban as a categorical variable 
+qog_eu$rururban <- as_factor(qog_eu$rururban)
+head(qog_eu)
+```
+
+
+```{r}
+# Here we will do some time series graph 
+# 1- suicide rate over time 
+
+```
+
+The dataset presents data from 1960 to 2019. However, the research project is only interested in analysing a single time point. The year 2015 is chosen because it includes the most data point. 
+
+```{r}
+qog_eu2015 <- qog_eu %>% 
+  group_by(nuts2) %>%
+  filter(year == "2015")
+
+
+summary(qog_eu2015)
+```
+
+
+
+
+
+The two focal variables chosen represent rurality (x) and mental health (y) and are operationalized as such: 
+
+- y : the dependent variable is the number of deaths by self-harm, male, expressed in  deaths per 100, 000 inhabitants. Statistics are collected based on information derived from the medical certificate of cause of deaths. Data is available for 215 regions. 
+
+- x : the independent variable is a categorical variable  which classifies regions into three categories: predominantly urban, intermediate, and predominantly rural. But this typology is not available at the level of our territorial unit, but at the finer scale nuts 3, where the social, economic, and demographic data we are interested in are not availbe. 
+
+
+Descriptive statistics
+
+```{r}
+# Plots
+library("wesanderson")
+library("Hmisc")
+
+
+# Focal X variable
+ggplot(data = qog_eu2015, mapping = aes(rururban)) +
+  geom_bar() + 
+  ggtitle("Focal X variable")
+
+
+# Focal Y variable
+ggplot(data = qog_eu2015, mapping = aes(suiciderate.m)) +
+  geom_bar() + 
+  ggtitle("Focal Y variable")
+
+
+# With the means for men 
+ggplot(data = qog_eu2015, mapping = aes(y = suiciderate.m, x = rururban)) + 
+ stat_summary(fun.data=mean_sdl, geom="bar") + 
+  ggtitle("Male Suicide rate by regional category") + 
+  labs(y = "Mean Male suicide rate", x = "Classification of Nuts 2 Categories") +
+  scale_fill_manual(values = wes_palette(n=4, name="IsleofDogs1"))
+
+
+ggplot(data = qog_eu2015, mapping = aes(y = suiciderate.f, x = rururban)) + 
+ stat_summary(fun.data=mean_sdl, geom="bar") + 
+  ggtitle("Female Suicide rate by regional category") + 
+  labs(y = "Mean Female suicide rate", x = "Classification of Nuts 2 Categories") +
+  scale_fill_manual(values = wes_palette(n=4, name="IsleofDogs1"))
+
+  
+
+# Focal Y variable
+
+ggplot(data = qog_eu2015, mapping = aes(y = suiciderate.m, x = rururban)) + 
+  geom_bar(stat = "identity", color = "steelblue") + 
+  ggtitle("Male Suicide rate by regional category") + 
+  labs(y = "Male suicide rate", x = "Classification of Nuts 2 Categories") +
+  scale_fill_manual(values = wes_palette(n=4, name="IsleofDogs1"))
+
+
+
+```
+```{r}
+
+# boxplot
+qog_eu2015 %>% 
+  ggplot(aes(x = rururban, y = suiciderate.m)) + 
+  geom_boxplot() + 
+  coord_flip() +
+  labs(y = "Male suicide rate", x = "Classification of Nuts 2 Categories") 
+
+
+# bar 
+ggplot(qog_eu2015, aes(x = rururban, y = suiciderate.m, color = as_factor(eusubregions))) +
+  geom_jitter(width = .2)
+
+
+```
+
+
+
+Data analysis strategy 
+1- Exclusion strategy 
+Analyse control and rival independent variables such as 
+- 15-24 years old neither in employment nor in education 
+- unemployment rate for youn male and all
+- gdp 
+- ? pop (# I shouldn't need to)
+
+> Uncertain on where to put educational attainment, could be a rival variable, or combined variable if I put as a negative difference between male and female? 
+
+2- Inclusive strategy to explain the causal mechanism
+
+- crude migration > is the time scale enough? 
+> Also I don't have a female specific variable for this, should I calculate a female population loss based on the population variable? 
+
+- ? female employment - admin, serv > but is this going to be significant if they move out? 
+- ? diff between educational attainment of male and female
+
+
+# Problems 
+# very context dependent, and here we project on a lage and varied territory (EU, Albania - Norway)
+# sample size: only 300+ cases, most var are only valid for 260, and a lot of NAs
+# Theory wise it's a lot about change, and here a static dataset. I can't do a longi study within the frame of the course.. 
+
+> Remember to explain why a multivariate linear regression is good
+- Explain combined effects : rural + gender + outmigration 
+- Compare the differential effects of male unemployment and female integration in the labour market / outmigration
+
+
+# 5- Results
+First, estimate the strength and significance of your focal relationship using bivariate analysis. Then use multiple regression analysis to further test and explore the relationship. Be clear about whether you are using an exclusionary and/or inclusionary strategy. Make sure to analyze how the focal relationship (strength and significance) is affected by the inclusion of additional variables and what conclusions you can draw from this change (or absence of change). Finally, examine the assumptions of the final model and comment briefly on these.
+
+# Bivariate model 
+
+```{r}
+# focal relationship
+mod1 <- lm(suiciderate.m ~ rururban, 
+           data = qog_eu2015)
+
+summary(mod1)
+
+```
+
+
+# Exclusion strategy
+
+```{r}
+
+#Model with control variables : Should I add them all together or one by one?
+# First: 15-24 years old population neither in employment nor in education percentage
+
+emod2 <- lm(suiciderate.m ~ rururban + 
+             edatt.sec.m,
+           data = qog_eu2015)
+
+summary(emod2)
+
+# Unemployment rate 15-24, male
+# Unemployment rate for men between 15-24 years old. Unemployed persons comprise persons who fulfil all the three following conditions: - are without work during the reference week; - are available to start work within the next two weeks; - have been actively seeking work in the past four weeks or have already found a job to start within the next three months.
+
+emod3 <- lm(shdeath.m ~ rururban + 
+           unemprate.ym,
+           data = qog_eu2015)
+
+summary(emod3)
+
+# Unemployment rate, all male
+# Unemployment rate for men between 15-74 years old
+emod4 <- lm(suiciderate.m ~ rururban + 
+           unemprate.tm,
+           data = qog_eu2015)
+
+summary(emod4)
+
+
+# Gdp 
+# Regional gross domestic product (GDP) by NUTS 2 regions in PPS (purchasing power standards) per inhabitant
+emod5 <- lm(suiciderate.m ~ rururban + 
+           gdp,
+           data = qog_eu2015)
+
+summary(emod5)
+```
+
+
+```{r}
+# Full model with control variables 
+emodc <- lm(suiciderate.m ~ rururban + 
+edatt.sec.m + 
+unemprate.tm + 
+gdp, 
+data = qog_eu2015)
+
+summary(emodc)
+```
+
+
+```{r}
+library(stargazer)
+stargazer(mod1, emod2, emodc,
+                     type = "html",
+                     align = TRUE,
+                     single.row = TRUE,
+                     df = FALSE,
+                     star.cutoffs = c(0.05, 0.01, 0.001),
+                     intercept.bottom = FALSE,
+                     dep.var.labels = "Male suicide rate",
+                     covariate.labels = c("Nuts 2 categogy",
+                                          "Edcuation attainment, second cycle, male",
+                                          "Unemployment rate",
+                                          "Regional Gross Domestic Product per inhabitant",
+                     title = "Table 1. Regression Results Model 1-3",
+                     keep.stat = c("n","adj.rsq", "f"),
+                     no.space = TRUE,
+                     out = "models.htm"))
+```
+
+
+```{r}
+
+# 1- agri jobs
+imod6a <- lm(suiciderate.m ~ rururban + 
+             edatt.sec.m +
+           unemprate.tm + 
+           gdp +
+            eagri.m,
+           data = qog_eu2015)
+
+summary(imod6a)
+
+imod6 <- lm(suiciderate.m ~ rururban + 
+             edatt.sec.m +
+           unemprate.tm + 
+           gdp +
+             rururban*eagri.m,
+           data = qog_eu2015)
+
+summary(imod6)
+
+
+
+# 2- migr 
+imod7a <- lm(suiciderate.m ~ rururban + 
+             edatt.sec.m +
+           unemprate.tm + 
+           gdp +
+             netmigr,
+           data = qog_eu2015)
+
+summary(imod7a)
+
+imod7 <- lm(suiciderate.m ~ rururban + 
+             edatt.sec.m +
+           unemprate.tm + 
+           gdp +
+             rururban*netmigr,
+           data = qog_eu2015)
+
+summary(imod7)
+
+
+# 3- fem edatt
+imod8 <- lm(suiciderate.m ~ rururban + 
+              edatt.sec.m+
+              unemprate.tm+
+              gdp+
+             edatt.ter.f,
+           data = qog_eu2015)
+
+summary(imod8)
+
+imod8 <- lm(suiciderate.m ~ rururban + 
+              edatt.sec.m+
+              unemprate.tm+
+              gdp+
+             rururban*edatt.ter.f,
+           data = qog_eu2015)
+
+summary(imod8)
+```
+
+
+
+```{r}
+# Final model 
+imodc <- lm(suiciderate.m ~ rururban + 
+             edatt.sec.m +
+           unemprate.tm + 
+           gdp +
+             rururban*netmigr + 
+             rururban*edatt.ter.f, 
+           data = qog_eu2015)
+
+summary(imodc)
+
+```
+
+# 
+
+# The section below is copy pasted from the teacher's script. I haven't spent time on it yet.
+When we have our final model, we check the model assumptions. The *plot* function includes several diagnostic plots for models. You can look at all of them at once using the following code: 
+
+```{r}
+# Diagnostic plots
+plot(imodc)
+
+
+```
+
+According to the graph, no observation seems to be an influential outlier. However, if we would detect some potentially problematic cases, we could figure out which ones they were by ranking the top cases with the highest Cook's distance.
+
+```{r}
+# Display the cases with the highest numbers of Cook's D
+CooksD <- cooks.distance(imodc)
+sort(CooksD, decreasing = TRUE) %>% head()
+```
+
+To test the assumption of linearity, we look at the residuals vs fitted plot. 
+
+```{r}
+# Linearity
+plot(imodc, which = 1)
+```
+To test for the absence of heteroscedasticity, we examine the scale-location plot. 
+
+```{r}
+# Homogeneity of variance
+# (Resiudals are independent and homoscedastic)
+plot(imodc, which = 3)
+```
+
+Finally, to check the assumption of normality of the residuals, we look at the normal q-q plot. 
+```{r}
+# Normality of the residuals
+plot(imodc, which = 2)
+```
+
+Last, we want an absence of multicollinearity in the model. There are several ways to test this. One is to examine the VIF (Variance Inflation Factor) values, where a rule of thumb is that values exceeding 4 requires further investigation. 
+Some coef are really high > it's because there are twice in the model. You could take out the interaction terms and test it again. 
+
+```{r}
+# Absence of multicollinearity
+library(car)
+vif(imodc)
+```
+
+We plot moderation by specifying a third variable and dividing the plot into cross-sections. 
+
+```{r}
+
+library("visreg")
+
+# Final model 
+
+visreg(imodc, "netmigr", # specifying x-variable to visualize
+       ylab = "Suiciderate", 
+       xlab = "Nuts2categories", 
+       gg = TRUE, # creating a ggplot
+       band = TRUE) + 
+  theme_classic() + 
+  ggtitle("Final model")
+
+# Visualizing model with interaction
+visreg(imodc, "netmigr", by = "rururban", 
+                      overlay = TRUE,
+                      ylab = "Suicide rate", 
+                      xlab = "Net migration",
+                      legend = FALSE,
+                      gg = TRUE, 
+       band = FALSE) + 
+  theme_classic() + 
+  ggtitle("Final model: The interaction effect of rurality and migration")
+
+```
+
+There are many different ways to create nice regression tables in R. *modelsummary* is really easy to use. 
+
+```{r}
+library(modelsummary)
+msummary(list(mod1, emodc, imodc), # List the models to include
+         stars = TRUE)
+```
+
+If you want to use RMarkdown when writing your paper, there are several packages that provide publication ready tables. 
+
+```{r results = "asis"}
+library(stargazer)
+stargazer(emodc, imodc,
+                     type = "html",
+                     align = TRUE,
+                     single.row = TRUE,
+                     df = FALSE,
+                     star.cutoffs = c(0.05, 0.01, 0.001),
+                     intercept.bottom = FALSE,
+                     dep.var.labels = "Index",
+                     covariate.labels = c("Nuts 2 categogt",
+                                          "Suicide rate",
+                                          "Edcuation attainment, second cycle, male",
+                                          "Unemployment rate",
+                                          "Regional Gross Domestic Product per inhabitant",
+                                          "Employment in agriculture, forestry, manufacture, male",
+                                          "Net migration",
+                                          "Employment in services female"),
+                     title = "Table 3. Regression Results Model 3-4",
+                     keep.stat = c("n","adj.rsq", "f"),
+                     no.space = TRUE,
+                     out = "models.htm")
+
+```
+
+
+
+
+# 6- Discussion
+A summary of your most important findings and a theoretically informed discussion of the conclusions that you can draw from these. Make sure that the focal relationship is at the center of the discussion.
+
+# 7- References
+Refer to the course literature as well as other peer-reviewed articles and/or academic literature.
+
+# 8- Appendix
+Include your R code as an appendix. Through your code, the reader should be able to reproduce all of the results and the graphs included in your article.
+
+```{r}
